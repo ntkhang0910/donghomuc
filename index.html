@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="content-type" content="text/html; charset=utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <meta name="theme-color" content="#121110">
+    <title>E-link Control</title>
+    <script>
+        (function () {
+            try {
+                var t = localStorage.getItem("clock-theme");
+                if (t !== "light" && t !== "dark") t = "light";
+                document.documentElement.setAttribute("data-theme", t);
+            } catch (e) {
+                document.documentElement.setAttribute("data-theme", "dark");
+            }
+        })();
+    </script>
+    <link rel="stylesheet" href="css.css?v=5">
+    <style id="critical-ui">
+        .app-ui-v2 .tab-content:not(.active) { display: none !important; }
+        .app-ui-v2 #tab-settings.active,
+        .app-ui-v2 #tab-countdown.active,
+        .app-ui-v2 #tab-image.active,
+        .app-ui-v2 #tab-editor.active { display: block !important; }
+        .app-ui-v2 nav.bottom-nav,
+        .app-ui-v2 .bottom-nav {
+            position: fixed !important;
+            top: auto !important;
+            bottom: 0; left: 0; right: 0;
+            z-index: 300;
+        }
+        .app-ui-v2 .app-main {
+            padding-bottom: calc(88px + env(safe-area-inset-bottom)) !important;
+        }
+    </style>
+
+
+    <!-- dithering.js not in repo -->
+    <!-- utils.js not in repo -->
+</head>
+
+<body class="ble-disconnected app-ui-v2">
+    <header class="app-header">
+        <div class="header-accent" aria-hidden="true"></div>
+        <div class="header-inner">
+            <div class="header-brand">
+                <span class="brand-mark" aria-hidden="true">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                </span>
+                <div class="brand-text">
+                    <h1>E-link</h1>
+                    <span class="brand-sub">Đồng hồ E-Paper DLG</span>
+                </div>
+            </div>
+            <div class="header-actions">
+                <div class="ble-status" id="ble-status" role="status" aria-live="polite">
+                    <span class="status-dot" id="status-dot"></span>
+                    <span class="status-label" id="status">Chưa kết nối</span>
+                </div>
+                <button type="button" class="btn-connect" onclick="preConnect();">
+                    <span class="btn-connect-icon" aria-hidden="true">📡</span>
+                    <span class="btn-connect-text">Kết nối</span>
+                </button>
+                <button type="button" id="btn-theme" class="btn-theme" aria-label="Đổi giao diện">🌙</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="app-main app-shell app-mode-advanced">
+    <div class="content page-wrap">
+
+    <div id="tab-settings" class="tab-content active">
+        <div class="hero-card">
+            <p class="hero-time" id="current-time-display" aria-live="polite">--:--:--</p>
+            <p class="hero-hint">Múi giờ (GMT+): <input type="number" max="14" min="-12" id="hour-offset" value="0" class="inline-num" aria-label="Múi giờ"> · để 0 nếu máy đúng giờ VN</p>
+            <div class="hero-actions">
+                <button id="time-setter" class="btn primary" type="button" onclick="setTime()">Đồng bộ giờ</button>
+                <button type="button" class="btn" onclick="setri('e102')">Đồng hồ</button>
+                <button type="button" class="btn" onclick="setri('e101')">Lịch</button>
+                <button type="button" class="btn" onclick="triggerRxTxCmd('E2')">Làm mới</button>
+            </div>
+        </div>
+
+        <p class="notice-bar">Dùng Chrome/Edge trên máy tính · iOS dùng Bluefy · Kết nối Bluetooth trước khi gửi lệnh</p>
+
+        <section class="panel compact">
+            <div class="panel-header">
+                <div class="panel-icon" aria-hidden="true">📶</div>
+                <div>
+                    <div class="panel-title">Thiết bị</div>
+                    <div class="panel-subtitle">Quét DLG-CLOCK</div>
+                </div>
+            </div>
+            <div class="button-group row-2">
+                <button id="connectbutton" type="button" class="btn primary" onclick="preConnect();">Quét thiết bị</button>
+                <button type="button" class="btn" onclick="reConnect();">Kết nối lại</button>
+            </div>
+        </section>
+
+        <section class="panel fold">
+            <details>
+            <summary>🕐 Tùy chọn đồng hồ</summary>
+            <div class="fold-body">
+            <button type="button" class="ble-action" onclick="setri('e4')" title="Bấm để đổi màu đồng hồ">Đổi màu đồng hồ</button>
+            </div>
+            </details>
+        </section>
+
+        <section class="panel fold">
+            <details>
+            <summary>⚙️ Cài đặt nâng cao</summary>
+            <div class="fold-body">
+            <button type="button" class="ble-action" onclick="triggerRxTxCmd('e3')" title="Bấm để đảo màu đen/trắng">Đảo màu đen/trắng</button>
+            <input type="text" id="cmdlut_red" placeholder="Hiệu chuẩn hex (01-0f)" value="">
+            <button class="ble-action" onclick="triggerEpdRed_lut(document.getElementById('cmdlut_red').value)">Gửi hiệu chuẩn</button>
+            <div class="button-group row-2">
+            <button type="button" onclick="triggerRxTxCmd('E2')" class="ble-action">Làm mới E2</button>
+            <button type="button" onclick="triggerRxTxCmd('AA')" class="ble-action">AA</button>
+            <button type="button" onclick="triggerRxTxCmd('AB')" class="ble-action">AB</button>
+            </div>
+        
+        <div class="fold-sub">
+            <strong>🌙 Ngủ &amp; tiết kiệm pin</strong>
+            <div class="form-row">
+           <div class="inline-field"><label for="D_S_hour">Giờ bắt đầu</label>
+            <input type="number" id="D_S_hour" value="0" min="0" max="23"></div>
+            <div class="inline-field"><label for="D_S_min">Giờ kết thúc</label>
+            <input type="number" id="D_S_min" value="0" min="0" max="59"></div></div>
+            <div class="button-group">
+            <button type="button" onclick="triggerRxTxCmd_XM('FB01')" class="ble-action" title="Bấm để bật không làm mới trong khoảng thời gian">Bật ngủ (không làm mới khi màn hình trắng)</button>
+            <button type="button" onclick="triggerRxTxCmd_XM('FB00')" class="ble-action" title="Bấm để tắt chế độ ngủ">Tắt ngủ (làm mới trong giờ màn hình trắng) Tiết kiệm pin + Sửa chữa)</button>
+        </div> 
+        <!-- <div class="button-group">
+            Set LED Color<select id="led_color" title="Set LED Color">
+                <option value='01'>Red</option>
+                <option value='02'>Blue</option>
+                <option value='03'>Green</option>
+                <option value='04'>Purple</option>
+                <option value='05'>Yellow</option>
+                <option value='06'>Pink</option>
+                <option value='07'>Cycle</option>
+            </select>
+            <label class="btn-action bg-emerald-600 text-white flex-1 sm:flex-auto ">Hour:</label>
+            <input type="number" id="D_S_hour" value="0" min="0" max="23">
+            <label class="btn-action bg-emerald-600 text-white flex-1 sm:flex-auto ">Minute:</label>
+            <input type="number" id="D_S_min" value="0" min="0" max="59">
+            <button type="button" onclick="triggerRxTxCmd_LED('e701')" title="Click to enable alarm">Enable Alarm</button>
+            <button type="button" onclick="triggerRxTxCmd_LED('e700')" title="Click to disable alarm">Disable Alarm</button>
+        </div> -->
+
+        </div> 
+
+        <div class="fold-sub">
+            <strong>🅿 Bảng số 2.13"</strong>
+            <div class="form-row">
+                <div class="inline-field" style="flex:2"><label for="CP">Nhập số</label>
+                <input type="text" id="CP" placeholder="Số:" value=""></div>
+                <button class="ble-action" onclick="triggerEpdCHEPAI(document.getElementById('CP').value)">Hiển thị số</button>
+            </div>
+            </div>
+            </div>
+            </details>
+        </section>
+
+    </div>
+
+    <div id="tab-countdown" class="tab-content">
+         <section class="date-picker-section">
+        <h2 class="page-title">Đếm ngược</h2>
+        <p class="page-desc">Chọn ngày mục tiêu và tùy chỉnh văn bản hiển thị trên màn hình E-Paper.</p>
+        <div class="date-picker-container">
+            <label for="datePicker">Chọn ngày:</label>
+            <input type="date" id="datePicker">
+
+        </div>
+    </section>
+
+    <div class="main-content">
+        <div class="input-section">
+            <div class="section-title">
+                <i>Cài đặt</i> Nhập liệu
+            </div>
+
+            <div class="input-group">
+                <label for="textInput">Nhập văn bản (tối đa 8 ký tự)</label>
+                <input type="text" id="textInput" maxlength="8" value="Con lai" placeholder="Nhập 1-8 ký tự">
+            </div>
+                        <div class="input-group">
+                <label>Giao diện đếm ngược</label>
+                <div class="theme-badge">Đếm ngược đồng hồ</div>
+            </div>
+            <div class="input-group" style="display:none">
+                <label for="gridSizeSelect">Giao diện đếm ngược</label>
+                <select id="gridSizeSelect">
+                    <option value="16" selected>Giao diện đếm ngược đồng hồ</option>
+                </select>
+                <div><span id="currentGridSize"></span></div>
+            </div>
+            <div class="input-group">
+                <label for="fontFamily">Chọn phông chữ (chỉ máy tính)</label>
+                <select id="fontFamily">
+                    <option value="Be Vietnam Pro">Be Vietnam Pro</option>
+                    <option value="Noto Sans">Noto Sans</option>
+                    <option value="Arial">Arial</option>
+                    <option value="SimSun" selected="">SimSun</option>
+                    <option value="Microsoft YaHei">Microsoft YaHei</option>
+                    <option value="SimHei">SimHei</option>
+                    <option value="KaiTi">KaiTi</option>
+                </select>
+            </div>
+
+            <div class="input-group">
+                <label for="fontSizeSlider">Cỡ chữ (50%-150%)</label>
+                <div class="slider-container">
+                    <input type="range" id="fontSizeSlider" min="50" max="150" value="100">
+                    <span class="slider-value" id="fontSizeValue">100%</span>
+                </div>
+                <small style="color: #7f8c8d;">Điều chỉnh tỷ lệ hiển thị chữ. Quá lớn có thể cắt ký tự</small>
+            </div>
+
+            <div class="options" style="display:none">
+                <div class="option-item">
+                    <input type="checkbox" id="invertColors" checked="">
+                    <label for="invertColors">Đảo màu</label>
+                </div>
+                <div class="option-item" style="display:none">
+                    <input type="checkbox" id="showGrid" checked="">
+                    <label for="showGrid">Hiện lưới</label>
+                </div>
+            </div>
+            <div class="preview-container">
+                <canvas id="previewCanvas" ></canvas>
+                <div class="grid-info" id="gridInfoText"></div>
+            </div>
+
+        </div>
+
+        <div class="button-row-actions">
+        <button id="generateBtn" class="ble-action">Bắt đầu đếm ngược</button>
+        <button class="copy-btn ble-action" id="copyBtn">Dừng đếm ngược</button>
+        </div>
+    </div>
+    </div>
+
+    <div id="tab-image" class="tab-content">
+        <h2 class="page-title">Truyền hình ảnh</h2>
+        <p class="page-desc">Tải ảnh, điều chỉnh dithering và gửi lên màn hình E-Paper.</p>
+        <section class="panel">
+            <div class="panel-header"><div class="panel-icon" aria-hidden="true">📁</div><div><div class="panel-title">Nguồn ảnh</div></div></div>
+            <div class="input-group"><label for="image_file">Chọn tệp hình ảnh</label>
+            <input type="file" id="image_file" onchange="update_image1()" accept=".png,.jpg,.bmp,.webp,.jpeg"></div>
+        </section>
+        <section class="panel">
+            <div class="panel-header"><div class="panel-icon" aria-hidden="true">⚙</div><div><div class="panel-title">Cấu hình xử lý</div></div></div>
+            <div class="control-grid">
+            <div class="inline-field"><label for="screen-size">Kích thước màn hình</label>
+            <select id="screen-size" onchange="updateCanvasSize()">
+                <option value="4.2-transfer">4.2" Truyền ảnh</option>
+                <option value="4.2-calendar-small">4.2" Lịch nhỏ</option>
+                <option value="7.5-transfer">7.5" Truyền ảnh</option>
+                <option value="7.5-calendar-small">7.5" Lịch nhỏ</option>
+                <option value="2.9-transfer">2.9" Truyền ảnh</option>
+                <option value="2.13-212x104">2.13" 212x104</option>
+                <option value="2.13-250x144">2.13" 250x144</option>
+            </select></div>
+            <div class="inline-field"><label for="dithering">Thuật toán dithering</label>
+            <select id="dithering" title="Thuật toán dithering">
+                <optgroup label="Ba màu Đen/Trắng/Đỏ">
+                    <option value="bwr_none">BWR Không dithering</option>
+                    <option value="bwr_floydsteinberg">BWR Floyd-Steinberg</option>
+                    <option value="bwr_atkinson">BWR Atkinson</option>
+                    <option value="bwr_bayer">BWR Bayer</option>
+                    <option value="bwr_stucki">BWR Stucki</option>
+                    <option value="bwr_jarvis">BWR Jarvis-Judice-Ninke</option>
+                </optgroup>
+                <optgroup label="Đen & Trắng">
+                    <option value="none">Không dithering</option>
+                    <option value="floydsteinberg">Floyd-Steinberg</option>
+                    <option value="atkinson">Atkinson</option>
+                    <option value="bayer">Bayer</option>
+                    <option value="stucki">Stucki</option>
+                    <option value="jarvis">Jarvis-Judice-Ninke</option>
+                </optgroup>
+            </select>
+        </div>
+
+            <div class="inline-field"><label for="threshold">Ngưỡng (đen trắng)</label>
+            <input type="range" max="255" min="10" value="125" id="threshold"></div>
+            <div class="inline-field"><label for="rotationSlider">Xoay <span id="rotationValue">0°</span></label>
+            <input type="range" id="rotationSlider" min="0" max="360" value="0" oninput="updateRotation(this.value)"></div>
+            <div class="inline-field"><label for="scaleSlider">Tỷ lệ <span id="scaleValue">100%</span></label>
+            <input type="range" id="scaleSlider" min="10" max="500" value="100" oninput="updateScale(this.value)"></div>
+            </div>
+        </section>
+
+        <section class="panel panel-image-workspace">
+            <div class="panel-header"><div class="panel-icon" aria-hidden="true">🖼</div><div><div class="panel-title">Xem trước &amp; thao tác</div><div class="panel-subtitle">Điều chỉnh vị trí, xoay và xem trước trước khi gửi</div></div></div>
+        <div class="button-group">
+            <button onclick="update_image()">Tải lại</button>
+            <button onclick="stretchToCanvas()">Kéo giãn vừa màn hình</button>
+            <button onclick="fitToCanvas()">Vừa khít màn hình</button>
+            <button onclick="updateScale('100')">Đặt lại 100%</button>
+            <button onclick="rotateImage(90)">Xoay 90° theo chiều kim đồng hồ</button>
+            <button onclick="rotateImage(-90)">Xoay 90° ngược chiều kim đồng hồ</button>
+            <button onclick="rotateImage(0)">Đặt lại góc xoay</button>
+        </div>
+
+        <div id="canvas-box">
+            <canvas id="canvas" style="border: black solid 1px;"></canvas>
+        </div>
+        </section>
+
+       
+        <section class="panel">
+            <div class="panel-header"><div class="panel-icon" aria-hidden="true">🎨</div><div><div class="panel-title">Điều chỉnh hình ảnh</div><div class="panel-subtitle">Độ sáng, tương phản, bão hòa và khuếch tán</div></div></div>
+            <div class="adjustment-row">
+                <label for="brightness">Độ sáng:</label>  
+                <span class="adjustment-value" id="brightnessValue">100</span>
+                <input type="range" id="brightness" min="-100" max="100" value="0">
+              
+            </div>
+            <div class="adjustment-row">
+                <label for="contrast">Độ tương phản:</label>
+                 <span class="adjustment-value" id="contrastValue">100</span>
+                <input type="range" id="contrast" min="0" max="200" value="100">
+               
+            </div>
+            <div class="adjustment-row">
+                <label for="saturation">Độ bão hòa:</label>
+                 <span class="adjustment-value" id="saturationValue">100</span>
+                <input type="range" id="saturation" min="0" max="200" value="100">
+               
+            </div>
+            <div class="adjustment-row">
+                <label for="diffusion">Cường độ khuếch tán:</label>
+                 <span class="adjustment-value" id="diffusionValue">50</span>
+                <input type="range" id="diffusion" min="0" max="100" value="50">
+               
+            </div>
+            <div class="button-group">
+                <button onclick="update_image()">Áp dụng điều chỉnh hình ảnh</button>
+                <button class="ble-action" onclick="upload_image()" style="font-weight: bold">Tải lên màn hình ngay</button>
+            </div>
+        </section>
+        
+    </div>
+
+   
+    <div id="tab-editor" class="tab-content">
+        <h2 class="page-title">Thiết kế mẫu</h2>
+        <p class="page-desc">Thiết kế bố cục trên canvas và áp dụng sang tab truyền ảnh.</p>
+
+        <section class="panel panel-qr-bank" id="panel-qr-bank">
+            <div class="panel-header">
+                <div class="panel-icon" aria-hidden="true">🏦</div>
+                <div>
+                    <div class="panel-title">Mẫu QR Bank</div>
+                    <div class="panel-subtitle">Tạo màn hình chuyển khoản với mã QR VietQR</div>
+                </div>
+            </div>
+            <div class="control-group qr-bank-form">
+                <div class="qr-bank-grid">
+                    <label for="qr-bank-owner">Tên chủ tài khoản
+                        <input type="text" id="qr-bank-owner" placeholder="NGUYEN VAN A" maxlength="40">
+                    </label>
+                    <label for="qr-bank-name">Ngân hàng
+                        <input type="text" id="qr-bank-name" placeholder="Vietcombank" maxlength="30">
+                    </label>
+                    <label for="qr-bank-account">Số tài khoản
+                        <input type="text" id="qr-bank-account" placeholder="1234567890" maxlength="20" inputmode="numeric">
+                    </label>
+                </div>
+                <label class="qr-bank-full" for="qr-bank-content">Nội dung QR (VietQR — dán từ app ngân hàng)
+                    <textarea id="qr-bank-content" placeholder="Dán chuỗi VietQR hoặc URL thanh toán..."></textarea>
+                </label>
+                <label class="qr-bank-full" for="qr-bank-image-upload">Hoặc upload ảnh QR
+                    <input type="file" id="qr-bank-image-upload" accept="image/*">
+                </label>
+                <div class="qr-bank-actions">
+                    <button type="button" id="apply-qr-bank-template">Áp dụng mẫu QR Bank</button>
+                    <button type="button" id="preview-qr-bank-template" class="secondary">Xem trước QR</button>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel panel-editor-workspace">
+            <div class="panel-header">
+                <div class="panel-icon" aria-hidden="true">✎</div>
+                <div>
+                    <div class="panel-title">Không gian thiết kế</div>
+                    <div class="panel-subtitle">Canvas và điều khiển phần tử đang chọn</div>
+                </div>
+            </div>
+            <div class="editor-workspace">
+                <div class="canvas-container">
+                    <canvas id="canvas_YS" width="600" height="450"></canvas>
+                </div>
+                <div class="control-panel">
+                    <div class="control-group size-controls1" id="size-controls">
+                        <h3>Đặt chiều rộng & chiều cao phần tử</h3>
+                        <div class="size-inputs">
+                            <input type="number" id="width-input" placeholder="Rộng" min="10" max="400" value="40">
+                            <input type="number" id="height-input" placeholder="Cao" min="10" max="300" value="40">
+                        </div>
+                        <button id="apply-size">Áp dụng kích thước</button>
+                    </div>
+                    <div class="control-group" id="rotate-controls">
+                        <h3>Xoay phần tử</h3>
+                        <div class="rotate-controls">
+                            <input type="range" id="rotation-input" min="0" max="360" value="0" step="1">
+                            <span id="rotation-value">0°</span>
+                            <button id="apply-rotation" style="display: none;">Apply</button>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <div class="element-actions">
+                            <button id="delete-element" class="danger">Xóa phần tử</button>
+                            <button id="duplicate-element" class="secondary">Sao chép phần tử</button>
+                        </div>
+                        <div class="element-actions">
+                            <button id="bring-to-front" style="display: none;">Lên trên</button>
+                            <button id="send-to-back" style="display: none;">Xuống dưới</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel">
+            <div class="panel-header">
+                <div class="panel-icon" aria-hidden="true">➕</div>
+                <div>
+                    <div class="panel-title">Thêm phần tử</div>
+                    <div class="panel-subtitle">Chọn loại và thêm vào canvas</div>
+                </div>
+            </div>
+            <div class="control-group">
+                <select id="element-type">
+                    <option value="image">Hình/Icon</option>
+                    <option value="text">Văn bản</option>
+                    <option value="rect">Hình chữ nhật</option>
+                    <option value="circle">Hình tròn</option>
+                    <option value="triangle">Tam giác</option>
+                    <option value="line">Đường thẳng</option>
+                    <option value="star">Ngôi sao</option>
+                </select>
+                <div class="shape-params" id="shape-params">
+                    <input type="number" id="param1" placeholder="Tham số 1" min="3" max="20" value="5">
+                    <input type="number" id="param2" placeholder="Tham số 2" min="0.1" max="5" step="0.1" value="0.5">
+                </div>
+                <button id="add-element">Thêm phần tử</button>
+            </div>
+            <textarea id="text-content" placeholder="Nhập nội dung văn bản">Văn bản tùy chỉnh</textarea>
+        </section>
+
+        <section class="panel">
+            <div class="panel-header">
+                <div class="panel-icon" aria-hidden="true">🎨</div>
+                <div>
+                    <div class="panel-title">Màu sắc &amp; văn bản</div>
+                    <div class="panel-subtitle">Bảng màu, font và kiểu chữ</div>
+                </div>
+            </div>
+            <div class="control-group" id="text-controls">
+                <h3>Chọn màu</h3>
+                <div class="color-palette">
+                    <div class="color-option selected" data-color="#ffffff" style="background-color:#ffffff;border:1px solid #ccc;"></div>
+                    <div class="color-option" data-color="#000000" style="background-color:#000000;"></div>
+                    <div class="color-option" data-color="#ff0000" style="background-color:#ff0000;"></div>
+                    <div class="color-option" data-color="#00ff00" style="background-color:#00ff00;"></div>
+                    <div class="color-option" data-color="#0000ff" style="background-color:#0000ff;"></div>
+                    <div class="color-option" data-color="#ffff00" style="background-color:#ffff00;"></div>
+                    <div class="color-option" data-color="#ff00ff" style="background-color:#ff00ff;"></div>
+                    <div class="color-option" data-color="#00ffff" style="background-color:#00ffff;"></div>
+                    <div class="color-option" data-color="#ff6b6b" style="background-color:#ff6b6b;"></div>
+                    <div class="color-option" data-color="#4ecdc4" style="background-color:#4ecdc4;"></div>
+                    <div class="color-option" data-color="#ffe066" style="background-color:#ffe066;"></div>
+                    <div class="color-option" data-color="#9b5de5" style="background-color:#9b5de5;"></div>
+                    <div class="color-option" data-color="#f15bb5" style="background-color:#f15bb5;"></div>
+                    <div class="color-option" data-color="#00bbf9" style="background-color:#00bbf9;"></div>
+                    <div class="color-option" data-color="#00f5d4" style="background-color:#00f5d4;"></div>
+                    <div class="color-option" data-color="#fee440" style="background-color:#fee440;"></div>
+                </div>
+                <div class="size-inputs">
+                    <select id="text-font">
+                        <option value="'Microsoft YaHei', 'Microsoft YaHei'">Microsoft YaHei</option>
+                        <option value="'PingFang SC', 'PingFang'">PingFang (macOS/iOS)</option>
+                        <option value="'Hiragino Sans GB', 'DongQingSimHei'">DongQingSimHei</option>
+                        <option value="'STXihei', 'STXihei'">STXihei</option>
+                        <option value="SimSun, 'SimSun'">SimSun</option>
+                        <option value="'SimHei', 'SimHei'">SimHei</option>
+                        <option value="'KaiTi', 'KaiTi'">KaiTi</option>
+                        <option value="'FangSong', 'FangSong'">FangSong</option>
+                        <option value="'STKaiti', 'STFontKaiTi'">STFontKaiTi</option>
+                        <option value="'STSong', 'STFontSimSun'">STFontSimSun</option>
+                        <option value="'STFangsong', 'STFangsong'">STFangsong</option>
+                        <option value="'LiSu', 'LiSu'">LiSu</option>
+                        <option value="'YouYuan', 'YouYuan'">YouYuan</option>
+                    </select>
+                    <select id="text-size">
+                        <option value="8">8px</option>
+                        <option value="10">10px</option>
+                        <option value="12">12px</option>
+                        <option value="14">14px</option>
+                        <option value="16" selected>16px</option>
+                        <option value="20">20px</option>
+                        <option value="24">24px</option>
+                        <option value="28">28px</option>
+                        <option value="32">32px</option>
+                        <option value="40">40px</option>
+                        <option value="48">48px</option>
+                        <option value="56">56px</option>
+                        <option value="60">60px</option>
+                        <option value="68">68px</option>
+                        <option value="76">76px</option>
+                        <option value="84">84px</option>
+                        <option value="88">88px</option>
+                        <option value="120">120px</option>
+                        <option value="200">200px</option>
+                        <option value="250">250px</option>
+                    </select>
+                </div>
+                <div class="text-style">
+                    <button id="text-bold">In đậm</button>
+                    <button id="text-italic">In nghiêng</button>
+                    <button id="text-underline">Gạch chân</button>
+                </div>
+                <button id="update-text">Cập nhật văn bản</button>
+            </div>
+        </section>
+
+        <section class="panel">
+            <div class="panel-header">
+                <div class="panel-icon" aria-hidden="true">↔</div>
+                <div>
+                    <div class="panel-title">Vị trí &amp; mã QR</div>
+                    <div class="panel-subtitle">Di chuyển phần tử hoặc tạo mã QR</div>
+                </div>
+            </div>
+            <div class="control-group">
+                <div class="position-controls">
+                    <button id="move-up">Di chuyển lên</button>
+                </div>
+                <div class="position-controls">
+                    <button id="move-left">Di chuyển trái</button>
+                    <button id="move-down">Di chuyển xuống</button>
+                    <button id="move-right">Di chuyển phải</button>
+                </div>
+                <div class="qrcode-controls">
+                    <textarea id="qrcode-content" placeholder="Nhập nội dung để tạo mã QR: văn bản/URL/thông tin liên hệ, v.v."></textarea>
+                    <button id="generate-qrcode" class="secondary">Tạo mã QR</button>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel">
+            <div class="panel-header">
+                <div class="panel-icon" aria-hidden="true">🖼</div>
+                <div>
+                    <div class="panel-title">Nền canvas</div>
+                    <div class="panel-subtitle">Màu nền, mẫu có sẵn hoặc tải ảnh lên</div>
+                </div>
+            </div>
+            <div class="control-group">
+                <div class="bg-color-selector">
+                    <div class="bg-color-picker" id="bg-color-picker" style="background-color:#ffffff"></div>
+                    <input type="color" id="bg-color-input" value="#ffffff" style="display: none">
+                    <span class="bg-color-value" id="bg-color-value">#FFFFFF</span>
+                    <button id="apply-bg-color">Apply</button>
+                </div>
+                <div class="template-preview" id="bg-templates">
+                    <div class="template-item selected" style="display:none" data-type="none">
+                        <div style="width:100%;height:100%;background:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;">Màu đặc</div>
+                    </div>
+                    <div class="template-item" style="display:none" data-type="memo">
+                        <div style="width:100%;height:100%;background:#f9f3d2;display:flex;align-items:center;justify-content:center;font-size:10px;">Ghi chú</div>
+                    </div>
+                    <div class="template-item" style="display:none" data-type="card">
+                        <div style="width:100%;height:100%;background:#e8f4f8;display:flex;align-items:center;justify-content:center;font-size:10px;">Danh thiếp</div>
+                    </div>
+                    <div class="template-item" style="display:none" data-type="gradient1">
+                        <div style="width:100%;height:100%;background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);display:flex;align-items:center;justify-content:center;font-size:10px;color:white;">Gradient1</div>
+                    </div>
+                    <div class="template-item" style="display:none" data-type="gradient2">
+                        <div style="width:100%;height:100%;background:linear-gradient(135deg, #f093fb 0%, #f5576c 100%);display:flex;align-items:center;justifycontent:center;font-size:10px;color:white;">Gradient2</div>
+                    </div>
+                    <div class="template-item" style="display:none" data-type="gradient3">
+                        <div style="width:100%;height:100%;background:linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);display:flex;align-items:center;justify-content:center;font-size:10px;color:white;">Gradient3</div>
+                    </div>
+                    <div class="template-item" data-type="bg_image1" data-image-url=".bg_image1.jpg">
+                        <div style="width:100%;height:100%;background:#f0f0f0;display:flex;align-items:center;justify-content:center;font-size:10px;color:#666;">Ngẫu nhiên</div>
+                    </div>
+                    <div class="template-item" data-type="bg_image2" data-image-url="./bg1.jpg">
+                        <div style="width:100%;height:100%;background:#f0f0f0;display:flex;align-items:center;justify-content:center;font-size:10px;color:#666;">Danh thiếp</div>
+                    </div>
+                    <div class="template-item" data-type="bg_image3" data-image-url="./images/bg3.jpg">
+                        <div style="width:100%;height:100%;background:#f0f0f0;display:flex;align-items:center;justify-content:center;font-size:10px;color:#666;">Ghi chú</div>
+                    </div>
+                    <div class="template-item" data-type="bg_image4" data-image-url="./images/bg4.jpg">
+                        <div style="width:100%;height:100%;background:#f0f0f0;display:flex;align-items:center;justify-content:center;font-size:10px;color:#666;">Thời khóa biểu</div>
+                    </div>
+                    <div class="template-item" data-type="bg_image5" data-image-url="./images/bg5.jpg">
+                        <div style="width:100%;height:100%;background:#f0f0f0;display:flex;align-items:center;justify-content:center;font-size:10px;color:#666;">Vật phẩm</div>
+                    </div>
+                    <div class="template-item" data-type="bg_image6" data-image-url="./images/bg5.jpg">
+                        <div style="width:100%;height:100%;background:#f0f0f0;display:flex;align-items:center;justify-content:center;font-size:10px;color:#666;">WIFI</div>
+                    </div>
+                    <div class="template-item" data-type="qr_bank" title="Áp dụng mẫu QR Bank">
+                        <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;">QR Bank</div>
+                    </div>
+                </div>
+                <button class="upload-btn secondary" style="margin-bottom:8px;">
+                    Upload Background Image
+                    <input type="file" id="bg-upload" accept="image/*">
+                </button>
+                <button id="apply-bg" style="display:none">Áp dụng nền</button>
+            </div>
+        </section>
+
+        <section class="panel">
+            <div class="panel-header">
+                <div class="panel-icon" aria-hidden="true">⭐</div>
+                <div>
+                    <div class="panel-title">Thư viện icon</div>
+                    <div class="panel-subtitle">Icon có sẵn hoặc tải icon tùy chỉnh</div>
+                </div>
+            </div>
+            <div class="control-group">
+                <div class="icon-materials-container">
+                    <div class="template-preview" id="image-templates">
+                        <div class="template-item selected" data-type="icon1">
+                            <div style="width:100%;height:100%;background:transparent;display:flex;align-items:center;justify-content:center;font-size:18px;">I1</div>
+                        </div>
+                        <div class="template-item" data-type="icon2">
+                            <div style="width:100%;height:100%;background:transparent;display:flex;align-items:center;justify-content:center;font-size:18px;">I2</div>
+                        </div>
+                        <div class="template-item" data-type="icon3">
+                            <div style="width:100%;height:100%;background:transparent;display:flex;align-items:center;justify-content:center;font-size:18px;">I3</div>
+                        </div>
+                        <div class="template-item" data-type="icon4">
+                            <div style="width:100%;height:100%;background:transparent;display:flex;align-items:center;justify-content:center;font-size:18px;">I4</div>
+                        </div>
+                        <div class="template-item" data-type="icon5">
+                            <div style="width:100%;height:100%;background:transparent;display:flex;align-items:center;justify-content:center;font-size:18px;">I5</div>
+                        </div>
+                        <div class="template-item" data-type="icon6">
+                            <div style="width:100%;height:100%;background:transparent;display:flex;align-items:center;justify-content:center;font-size:18px;">I6</div>
+                        </div>
+                        <div class="template-item" data-type="icon7">
+                            <div style="width:100%;height:100%;background:transparent;display:flex;align-items:center;justify-content:center;font-size:18px;">I7</div>
+                        </div>
+                        <div class="template-item" data-type="icon8">
+                            <div style="width:100%;height:100%;background:transparent;display:flex;align-items:center;justify-content:center;font-size:18px;">I8</div>
+                        </div>
+                        <div class="template-item" data-type="icon9">
+                            <div style="width:100%;height:100%;background:transparent;display:flex;align-items:center;justify-content:center;font-size:18px;">I9</div>
+                        </div>
+                        <div class="template-item" data-type="icon10">
+                            <div style="width:100%;height:100%;background:transparent;display:flex;align-items:center;justify-content:center;font-size:18px;">I10</div>
+                        </div>
+                        <div class="template-item" data-type="icon11">
+                            <div style="width:100%;height:100%;background:transparent;display:flex;align-items:center;justify-content:center;font-size:18px;">I11</div>
+                        </div>
+                        <div class="template-item" data-type="icon12">
+                            <div style="width:100%;height:100%;background:transparent;display:flex;align-items:center;justify-content:center;font-size:18px;">I12</div>
+                        </div>
+                        <div class="template-item" data-type="icon13">
+                            <div style="width:100%;height:100%;background:transparent;display:flex;align-items:center;justify-content:center;font-size:18px;">I13</div>
+                        </div>
+                        <div class="template-item" data-type="icon14">
+                            <div style="width:100%;height:100%;background:transparent;display:flex;align-items:center;justify-content:center;font-size:18px;">I14</div>
+                        </div>
+                        <div class="template-item" data-type="icon15">
+                            <div style="width:100%;height:100%;background:transparent;display:flex;align-items:center;justify-content:center;font-size:18px;">I15</div>
+                        </div>
+                        <div class="template-item" data-type="icon16">
+                            <div style="width:100%;height:100%;background:transparent;display:flex;align-items:center;justify-content:center;font-size:18px;">I16</div>
+                        </div>
+                        <div class="template-item" data-type="icon17">
+                            <div style="width:100%;height:100%;background:transparent;display:flex;align-items:center;justify-content:center;font-size:18px;">I17</div>
+                        </div>
+                        <div class="template-item" data-type="icon18">
+                            <div style="width:100%;height:100%;background:transparent;display:flex;align-items:center;justify-content:center;font-size:18px;">I18</div>
+                        </div>
+                        <div class="template-item" data-type="icon19">
+                            <div style="width:100%;height:100%;background:transparent;display:flex;align-items:center;justify-content:center;font-size:18px;">I19</div>
+                        </div>
+                        <div class="template-item" data-type="icon20">
+                            <div style="width:100%;height:100%;background:transparent;display:flex;align-items:center;justify-content:center;font-size:18px;">I20</div>
+                        </div>
+                        <div class="template-item" data-type="icon21">
+                            <div style="width:100%;height:100%;background:transparent;display:flex;align-items:center;justify-content:center;font-size:18px;">I21</div>
+                        </div>
+                        <div class="template-item" data-type="icon22">
+                            <div style="width:100%;height:100%;background:transparent;display:flex;align-items:center;justify-content:center;font-size:18px;">I22</div>
+                        </div>
+                        <div class="template-item" data-type="icon23">
+                            <div style="width:100%;height:100%;background:transparent;display:flex;align-items:center;justify-content:center;font-size:18px;">I23</div>
+                        </div>
+                        <div class="template-item" data-type="icon24">
+                            <div style="width:100%;height:100%;background:transparent;display:flex;align-items:center;justify-content:center;font-size:18px;">I24</div>
+                        </div>
+                        <div class="template-item" data-type="icon25">
+                            <div style="width:100%;height:100%;background:transparent;display:flex;align-items:center;justify-content:center;font-size:18px;">I25</div>
+                        </div>
+                    </div>
+                </div>
+                <button class="upload-btn secondary" style="margin-bottom:8px;">
+                    Upload Custom Icon
+                    <input type="file" id="icon-upload" accept="image/*" multiple>
+                </button>
+                <button id="save-canvas" class="secondary">Lưu canvas thành ảnh (có thể khôi phục qua tải ảnh nền)</button>
+                <button id="add-local-image" class="local-image-btn" style="display:none"></button>
+            </div>
+        </section>
+
+        <section class="panel editor-actions-panel">
+            <div class="panel-header">
+                <div class="panel-icon" aria-hidden="true">🚀</div>
+                <div>
+                    <div class="panel-title">Hoàn tất &amp; áp dụng</div>
+                    <div class="panel-subtitle">Xóa canvas hoặc chuyển mẫu sang tab truyền ảnh</div>
+                </div>
+            </div>
+            <div class="control-group">
+                <button id="clear-canvas" class="danger">Xóa tất cả phần tử trên canvas</button>
+                <button onclick="saveCanvasYSAndUpdateImage()">Áp dụng mẫu & chuyển sang truyền ảnh</button>
+            </div>
+        </section>
+    </div>
+
+    </div>
+
+<aside class="log-panel" id="log-box">
+            <div class="log-panel-header">
+                <span class="log-panel-title"><span aria-hidden="true">📋</span> Nhật ký hoạt động</span>
+                <button type="button" class="log-clear-btn" onclick="document.getElementById('log').innerHTML = '';">Xóa nhật ký</button>
+            </div>
+            <div id="log"></div>
+        </aside>
+    </main>
+
+    <nav class="bottom-nav" aria-label="Menu chính">
+        <div class="bottom-nav-inner">
+            <div class="tab-buttons">
+                <button class="tab-button active" data-tab="tab-settings" type="button">
+                    <span class="tab-icon-wrap" aria-hidden="true"><span class="tab-icon">🏠</span></span>
+                    <span class="tab-label">Trang chủ</span>
+                </button>
+                <button class="tab-button" data-tab="tab-countdown" type="button">
+                    <span class="tab-icon-wrap" aria-hidden="true"><span class="tab-icon">⏳</span></span>
+                    <span class="tab-label">Đếm ngược</span>
+                </button>
+                <button class="tab-button" data-tab="tab-image" type="button">
+                    <span class="tab-icon-wrap" aria-hidden="true"><span class="tab-icon">🖼</span></span>
+                    <span class="tab-label">Ảnh</span>
+                </button>
+                <button class="tab-button" data-tab="tab-editor" type="button">
+                    <span class="tab-icon-wrap" aria-hidden="true"><span class="tab-icon">✎</span></span>
+                    <span class="tab-label">Thiết kế</span>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <script src="https://cdn.jsdelivr.net/npm/davidshimjs-qrcodejs@0.0.2/qrcode.min.js"></script>
+    <script src="app.js?v=5"></script>
+</body>
+</html>
